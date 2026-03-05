@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KDP Splunk Enterprise Architecture</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;700;800&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: #060c18;
+    font-family: 'Exo 2', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 32px 20px 52px;
+    overflow-x: auto;
+  }
+  body::before {
+    content:''; position:fixed; inset:0;
+    background:
+      radial-gradient(ellipse 70% 50% at 50% 40%, rgba(0,100,220,0.08) 0%, transparent 70%),
+      repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(0,160,255,0.025) 40px),
+      repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(0,160,255,0.025) 40px);
+    pointer-events:none; z-index:0;
+  }
+
+  h1 {
+    font-family:'Share Tech Mono',monospace;
+    color:#00d4ff; font-size:1.1rem; letter-spacing:.28em;
+    text-transform:uppercase; margin-bottom:5px;
+    opacity:.9; z-index:1; position:relative;
+  }
+  .subtitle {
+    font-size:.68rem; color:#2a5070; letter-spacing:.2em;
+    text-transform:uppercase; margin-bottom:32px;
+    font-family:'Share Tech Mono',monospace; position:relative; z-index:1;
+  }
+
+  /* ─── DIAGRAM WRAPPER ─── */
+  .diagram {
+    position:relative;
+    width:1400px;
+    max-width:100%;
+    z-index:1;
+  }
+  svg.conn {
+    position:absolute; top:0; left:0;
+    width:100%; height:100%;
+    pointer-events:none; overflow:visible;
+  }
+
+  /*
+   * LAYOUT:
+   *  col0 (190px) = source groups (Network, Infra, Cloud, Apps)
+   *  gap  (56px)
+   *  col1 (175px) = Solarwinds + HF-01..05 + SAP + Hybris  (one tall column)
+   *  gap  (56px)
+   *  col2 (230px) = Splunk Cloud (centre, spans vertically centred)
+   *  gap  (56px)
+   *  col3 (180px) = iAutomate + ServiceNow
+   *
+   *  Datadog sits BELOW Splunk Cloud, centred on same x-axis.
+   *  We achieve this with an absolute-positioned element inside the diagram.
+   */
+
+  .layout {
+    display: grid;
+    grid-template-columns: 190px 175px 1fr 230px 1fr 180px;
+    /* col0=sources  col1=HFs  col2=left-gap  col3=splunk+dd  col4=right-gap  col5=downstream */
+    column-gap: 0;
+    align-items: start;
+    padding: 28px 0 28px;
+    width: 100%;
+  }
+
+  .gap { flex-shrink:0; }
+  .flex-grow { flex: 1; }   /* kept for legacy, not used in grid */
+
+  /* vertical flex columns */
+  .col {
+    display:flex; flex-direction:column;
+    gap:10px;
+  }
+  .col-src   { width:190px; }
+  .col-hf    { width:175px; margin-left: 40px; }
+  .col-mid   { width:230px; display:flex; flex-direction:column; align-items:center; justify-self:center; }
+  .col-right { width:180px; justify-content:center; justify-self:end; }
+
+  /* ─── SECTION LABELS ─── */
+  .slabel {
+    font-family:'Share Tech Mono',monospace;
+    font-size:.52rem; letter-spacing:.14em; text-transform:uppercase;
+    padding:3px 0 2px 2px;
+    border-bottom:1px solid rgba(30,80,140,0.22);
+    margin-bottom:3px; color:#2a4a6a;
+  }
+  .slabel.gold   { color:#6a4a10; border-color:rgba(140,100,20,.22); }
+  .slabel.red    { color:#7a1a2a; border-color:rgba(160,40,60,.22); }
+  .slabel.violet { color:#3a1a7a; border-color:rgba(80,30,180,.22); }
+  .slabel.purple { color:#4a2a8a; border-color:rgba(100,50,180,.22); }
+  .slabel.teal   { color:#0a5a4a; border-color:rgba(20,120,100,.22); }
+  .slabel.cyan   { color:#0a4a5a; border-color:rgba(0,120,160,.22); }
+  .slabel.green  { color:#1a4a2a; border-color:rgba(20,100,50,.22); }
+  .slabel.orange { color:#7a3010; border-color:rgba(160,70,20,.22); }
+  .slabel.pink   { color:#7a1a5a; border-color:rgba(160,40,120,.22); }
+  .slabel.center { text-align:center; }
+
+  .sdiv {
+    height:1px;
+    background:linear-gradient(90deg,transparent,rgba(60,80,120,.28),transparent);
+    margin:6px 0;
+  }
+
+  /* ─── NODE BASE ─── */
+  .node {
+    position:relative; border-radius:10px;
+    padding:10px 13px;
+    display:flex; align-items:center; gap:10px;
+    cursor:default;
+    transition:transform .2s, box-shadow .2s;
+  }
+  .node:hover { transform:translateY(-2px); }
+
+  .n-hf {
+    background:linear-gradient(135deg,#0d1e35,#0a1828);
+    border:1px solid #1a4a7a;
+    box-shadow:0 0 14px rgba(0,100,200,.15),inset 0 1px 0 rgba(255,255,255,.04);
+  }
+  .n-hf:hover { border-color:#2a7acc; box-shadow:0 0 22px rgba(0,140,255,.3); }
+
+  /* HF-05 — distinct warm teal */
+  .n-hf5 {
+    background:linear-gradient(135deg,#071e1a,#041410);
+    border:1px solid #0e7a6a;
+    box-shadow:0 0 14px rgba(0,180,150,.18),inset 0 1px 0 rgba(255,255,255,.04);
+  }
+  .n-hf5:hover { border-color:#14c0a0; box-shadow:0 0 22px rgba(0,220,180,.34); }
+  .n-hf5 .nl { color:#30e8c0; }
+  .n-hf5 .ns { color:#0a6a58; }
+
+  .n-sap {
+    background:linear-gradient(135deg,#1a1508,#120f04);
+    border:1px solid #7a5c10;
+    box-shadow:0 0 14px rgba(180,120,0,.14),inset 0 1px 0 rgba(255,255,255,.04);
+  }
+  .n-sap:hover { border-color:#c89020; box-shadow:0 0 22px rgba(220,160,0,.28); }
+
+  .n-gke {
+    background:linear-gradient(135deg,#1a040a,#110208);
+    border:1px solid #8a1a2a;
+    box-shadow:0 0 14px rgba(180,40,60,.14),inset 0 1px 0 rgba(255,255,255,.04);
+  }
+  .n-gke:hover { border-color:#cc2a3a; box-shadow:0 0 22px rgba(220,60,80,.28); }
+
+  /* ─── GROUPED BOX BASE ─── */
+  .ngrp {
+    position:relative; border-radius:11px;
+    padding:12px 13px; cursor:default;
+    display:flex; flex-direction:column;
+    transition:transform .2s, box-shadow .2s;
+  }
+  .ngrp:hover { transform:translateY(-2px); }
+
+  .ngrp-net  { background:linear-gradient(135deg,#0f0a1e,#080614); border:1px solid #3a1a7a; box-shadow:0 0 14px rgba(80,30,180,.16),inset 0 1px 0 rgba(255,255,255,.04); }
+  .ngrp-net:hover  { border-color:#6030cc; box-shadow:0 0 24px rgba(110,50,240,.3); }
+  .ngrp-infra { background:linear-gradient(135deg,#001a14,#00110d); border:1px solid #0a6a4a; box-shadow:0 0 14px rgba(0,150,100,.15),inset 0 1px 0 rgba(255,255,255,.04); }
+  .ngrp-infra:hover { border-color:#10a870; box-shadow:0 0 24px rgba(0,200,130,.3); }
+  .ngrp-cloud { background:linear-gradient(135deg,#0d0a22,#080618); border:1px solid #4a2a9a; box-shadow:0 0 14px rgba(100,50,200,.16),inset 0 1px 0 rgba(255,255,255,.04); }
+  .ngrp-cloud:hover { border-color:#7a4acc; box-shadow:0 0 24px rgba(130,70,255,.3); }
+  .ngrp-apps  { background:linear-gradient(135deg,#1a0a00,#110700); border:1px solid #8a4010; box-shadow:0 0 14px rgba(180,80,20,.15),inset 0 1px 0 rgba(255,255,255,.04); }
+  .ngrp-apps:hover  { border-color:#cc6020; box-shadow:0 0 24px rgba(220,100,30,.3); }
+
+  .gh { display:flex; align-items:center; gap:8px; margin-bottom:9px; }
+  .gt { font-family:'Share Tech Mono',monospace; font-size:.63rem; letter-spacing:.08em; font-weight:700; }
+  .ngrp-net   .gt { color:#9070ee; }
+  .ngrp-infra .gt { color:#30d09a; }
+  .ngrp-cloud .gt { color:#a880ff; }
+  .ngrp-apps  .gt { color:#e08040; }
+
+  .gdiv { height:1px; border:none; margin:0 0 8px; }
+  .ngrp-net   .gdiv { background:rgba(80,30,180,.28); }
+  .ngrp-infra .gdiv { background:rgba(0,150,100,.28); }
+  .ngrp-cloud .gdiv { background:rgba(100,50,200,.28); }
+  .ngrp-apps  .gdiv { background:rgba(180,80,20,.28); }
+
+  .gmlist { display:flex; flex-direction:column; gap:6px; padding-left:2px; }
+  .gm { display:flex; align-items:center; gap:7px; font-family:'Share Tech Mono',monospace; font-size:.6rem; letter-spacing:.05em; }
+  .ngrp-net   .gm { color:#6a50cc; }
+  .ngrp-infra .gm { color:#20a878; }
+  .ngrp-cloud .gm { color:#8860cc; }
+  .ngrp-apps  .gm { color:#c07030; }
+
+  .mdot { width:5px; height:5px; border-radius:50%; flex-shrink:0; animation:pulse 2.2s infinite; }
+  .ngrp-net   .mdot { background:#9070ee; box-shadow:0 0 4px #9070ee; }
+  .ngrp-infra .mdot { background:#00ffcc; box-shadow:0 0 4px #00ffcc; }
+  .ngrp-cloud .mdot { background:#cc88ff; box-shadow:0 0 4px #cc88ff; }
+  .ngrp-apps  .mdot { background:#ffaa60; box-shadow:0 0 4px #ffaa60; }
+
+  /* ─── SPECIAL NODES ─── */
+
+  /* Solarwinds */
+  .n-relay {
+    background:linear-gradient(135deg,#0a1a2a,#061016);
+    border:1px solid #1a7a9a;
+    box-shadow:0 0 16px rgba(0,180,220,.18),inset 0 1px 0 rgba(255,255,255,.04);
+    border-radius:11px; padding:12px 13px;
+    display:flex; align-items:center; gap:10px;
+    cursor:default; position:relative;
+    transition:transform .2s, box-shadow .2s;
+  }
+  .n-relay:hover { transform:translateY(-2px); box-shadow:0 0 26px rgba(0,220,255,.32); border-color:#2ab8d8; }
+
+  /* SAP inline */
+  /* uses .node .n-sap already */
+
+  /* Splunk Cloud */
+  .n-splunk {
+    background:linear-gradient(145deg,#071830,#05102a 60%,#071830);
+    border:1.5px solid #0a5aaa; border-radius:20px;
+    box-shadow:0 0 60px rgba(0,120,255,.26),0 0 120px rgba(0,80,200,.12),inset 0 1px 0 rgba(100,180,255,.1);
+    padding:30px 22px;
+    display:flex; flex-direction:column; align-items:center; gap:12px;
+    width:100%; position:relative; cursor:default;
+    transition:box-shadow .3s;
+  }
+  .n-splunk:hover { box-shadow:0 0 80px rgba(0,160,255,.4),0 0 150px rgba(0,100,220,.18),inset 0 1px 0 rgba(100,180,255,.14); }
+
+  /* Datadog — sits below Splunk, same column */
+  .n-datadog {
+    background:linear-gradient(135deg,#12091e,#0c0615);
+    border:1px solid #6a2a9a;
+    box-shadow:0 0 16px rgba(130,50,200,.18),inset 0 1px 0 rgba(255,255,255,.04);
+    border-radius:11px; padding:12px 14px;
+    display:flex; flex-direction:column; align-items:center;
+    gap:7px; text-align:center; cursor:default; position:relative;
+    width:100%;
+    transition:transform .2s, box-shadow .2s;
+  }
+  .n-datadog:hover { transform:translateY(-2px); box-shadow:0 0 26px rgba(150,60,240,.32); border-color:#9a3acc; }
+
+  /* iAutomate — vivid orange */
+  .n-auto {
+    background:linear-gradient(135deg,#1e0e02,#130800);
+    border:1px solid #c05010;
+    box-shadow:0 0 16px rgba(220,100,20,.22),inset 0 1px 0 rgba(255,255,255,.04);
+    border-radius:11px; padding:13px 14px;
+    display:flex; flex-direction:column; align-items:center;
+    gap:7px; text-align:center; cursor:default; position:relative;
+    width:100%;
+    transition:transform .2s, box-shadow .2s;
+  }
+  .n-auto:hover { transform:translateY(-2px); box-shadow:0 0 28px rgba(255,130,30,.38); border-color:#ff7030; }
+
+  /* ServiceNow — deep indigo/violet */
+  .n-snow {
+    background:linear-gradient(135deg,#0c0a20,#080616);
+    border:1px solid #4a20aa;
+    box-shadow:0 0 16px rgba(100,50,220,.22),inset 0 1px 0 rgba(255,255,255,.04);
+    border-radius:11px; padding:13px 14px;
+    display:flex; flex-direction:column; align-items:center;
+    gap:7px; text-align:center; cursor:default; position:relative;
+    width:100%;
+    transition:transform .2s, box-shadow .2s;
+  }
+  .n-snow:hover { transform:translateY(-2px); box-shadow:0 0 28px rgba(130,70,255,.38); border-color:#7040ee; }
+
+  /* ─── ICONS ─── */
+  .ico {
+    width:32px; height:32px; border-radius:7px;
+    display:flex; align-items:center; justify-content:center;
+    flex-shrink:0; font-size:16px;
+  }
+  .ico-hf    { background:rgba(0,100,200,.22); }
+  .ico-sap   { background:rgba(180,120,0,.22); }
+  .ico-gke   { background:rgba(180,40,60,.22); }
+  .ico-net   { background:rgba(80,30,180,.22); font-size:15px; }
+  .ico-infra { background:rgba(0,150,100,.22); font-size:15px; }
+  .ico-cloud { background:rgba(100,50,200,.22); font-size:15px; }
+  .ico-apps  { background:rgba(180,80,20,.22); font-size:15px; }
+  .ico-relay { background:rgba(0,180,220,.18); font-size:17px; width:34px; height:34px; border-radius:8px; }
+  .ico-dd    { background:rgba(130,50,200,.2);  font-size:22px; width:38px; height:38px; border-radius:9px; }
+  .ico-auto  { background:rgba(20,180,70,.2);   font-size:22px; width:38px; height:38px; border-radius:9px; }
+  .ico-snow  { background:rgba(40,160,40,.2);   font-size:22px; width:38px; height:38px; border-radius:9px; }
+  .ico-sp    { background:rgba(0,140,255,.15);  font-size:30px; width:54px; height:54px; border-radius:13px; }
+
+  /* ─── TEXT ─── */
+  .nl { font-family:'Share Tech Mono',monospace; font-size:.66rem; letter-spacing:.07em; line-height:1.4; }
+  .ns { font-family:'Share Tech Mono',monospace; font-size:.53rem; letter-spacing:.04em; }
+  .n-hf  .nl { color:#6ab8f0; } .n-hf  .ns { color:#2a5070; }
+  .n-sap .nl { color:#d4a040; } .n-sap .ns { color:#806020; }
+  .n-gke .nl { color:#ff6070; } .n-gke .ns { color:#7a1a2a; }
+
+  .relay-t { font-family:'Share Tech Mono',monospace; font-size:.7rem;  letter-spacing:.1em;  color:#40d0f0; font-weight:700; }
+  .relay-s { font-family:'Share Tech Mono',monospace; font-size:.54rem; letter-spacing:.05em; color:#1a6a80; }
+  .dd-t    { font-family:'Share Tech Mono',monospace; font-size:.72rem; letter-spacing:.1em;  color:#b060ff; font-weight:700; }
+  .dd-s    { font-family:'Share Tech Mono',monospace; font-size:.54rem; letter-spacing:.05em; color:#5a2a80; }
+  .auto-t  { font-family:'Share Tech Mono',monospace; font-size:.7rem;  letter-spacing:.09em; color:#ff8040; font-weight:700; }
+  .auto-s  { font-family:'Share Tech Mono',monospace; font-size:.6rem;  letter-spacing:.05em; color:#cc5820; }
+  .auto-ss { font-family:'Share Tech Mono',monospace; font-size:.52rem; letter-spacing:.04em; color:#7a3010; }
+  .snow-t  { font-family:'Share Tech Mono',monospace; font-size:.72rem; letter-spacing:.1em;  color:#9070ff; font-weight:700; }
+  .snow-s  { font-family:'Share Tech Mono',monospace; font-size:.54rem; letter-spacing:.05em; color:#5030aa; }
+  .sp-t    { font-family:'Share Tech Mono',monospace; font-size:.84rem; letter-spacing:.13em; color:#40aaff; font-weight:700; }
+  .sp-s    { font-family:'Share Tech Mono',monospace; font-size:.6rem;  color:#2060a0; text-align:center; }
+
+  /* ─── STATUS DOTS ─── */
+  .dot {
+    width:7px; height:7px; border-radius:50%;
+    position:absolute; top:9px; right:9px;
+    animation:pulse 2s infinite;
+  }
+  .d-blue   { background:#00aaff; box-shadow:0 0 6px #00aaff; }
+  .d-green  { background:#00ff88; box-shadow:0 0 6px #00ff88; }
+  .d-gold   { background:#ffcc00; box-shadow:0 0 6px #ffcc00; }
+  .d-purple { background:#cc88ff; box-shadow:0 0 6px #cc88ff; }
+  .d-teal   { background:#00ffcc; box-shadow:0 0 6px #00ffcc; }
+  .d-red    { background:#ff4455; box-shadow:0 0 6px #ff4455; }
+  .d-cyan   { background:#00eeff; box-shadow:0 0 6px #00eeff; }
+  .d-lime   { background:#40ff80; box-shadow:0 0 6px #40ff80; }
+  .d-violet { background:#9070ee; box-shadow:0 0 6px #9070ee; }
+  .d-orange { background:#ff8830; box-shadow:0 0 6px #ff8830; }
+  .d-pink   { background:#ff60cc; box-shadow:0 0 6px #ff60cc; }
+
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1);} 50%{opacity:.35;transform:scale(.7);} }
+  @keyframes dashFlow { to { stroke-dashoffset:-20; } }
+
+  /* ─── LEGEND ─── */
+  .legend {
+    display:flex; gap:15px; margin-top:28px; flex-wrap:wrap; justify-content:center;
+    z-index:1; position:relative;
+  }
+  .li {
+    display:flex; align-items:center; gap:6px;
+    font-family:'Share Tech Mono',monospace;
+    font-size:.56rem; color:#3a6080; letter-spacing:.05em;
+  }
+  .ldot { display:inline-block; width:7px; height:7px; border-radius:50%; }
+  .lline { width:22px; height:1.5px; background:repeating-linear-gradient(90deg,currentColor 0,currentColor 4px,transparent 4px,transparent 8px); }
+</style>
+</head>
+<body>
+
+<h1>KDP Splunk Enterprise Architecture</h1>
+<p class="subtitle">Data Ingestion, Forwarding &amp; Automation Topology</p>
+
+<div class="diagram">
+  <svg class="conn" id="svg-lines" xmlns="http://www.w3.org/2000/svg"></svg>
+
+  <div class="layout">
+
+    <!-- ══ COL 0 — SOURCE GROUPS ══ -->
+    <div class="col col-src" id="col0" style="grid-column:1;">
+
+      <div class="slabel violet">Network</div>
+      <div class="ngrp ngrp-net" id="grp-net">
+        <div class="dot d-violet"></div>
+        <div class="gh"><div class="ico ico-net">🌐</div><div class="gt">NETWORK DEVICES</div></div>
+        <hr class="gdiv"/>
+        <div class="gmlist">
+          <div class="gm"><span class="mdot"></span>Routers</div>
+          <div class="gm"><span class="mdot"></span>Switches</div>
+          <div class="gm"><span class="mdot"></span>Firewalls</div>
+          <div class="gm"><span class="mdot"></span>Load Balancers</div>
+        </div>
+      </div>
+
+      <div class="sdiv"></div>
+      <div class="slabel teal">Infra / VMs</div>
+      <div class="ngrp ngrp-infra" id="grp-infra">
+        <div class="dot d-teal"></div>
+        <div class="gh"><div class="ico ico-infra">🖧</div><div class="gt">INFRA / VMs</div></div>
+        <hr class="gdiv"/>
+        <div class="gmlist">
+          <div class="gm"><span class="mdot"></span>Veeam</div>
+          <div class="gm"><span class="mdot"></span>Idera</div>
+          <div class="gm"><span class="mdot"></span>Dell EMC</div>
+          <div class="gm"><span class="mdot"></span>HP / VMs</div>
+        </div>
+      </div>
+
+      <div class="sdiv"></div>
+      <div class="slabel purple">Cloud</div>
+      <div class="ngrp ngrp-cloud" id="grp-cloud">
+        <div class="dot d-purple"></div>
+        <div class="gh"><div class="ico ico-cloud">☁️</div><div class="gt">CLOUD PLATFORMS</div></div>
+        <hr class="gdiv"/>
+        <div class="gmlist">
+          <div class="gm"><span class="mdot"></span>Google Cloud</div>
+          <div class="gm"><span class="mdot"></span>Azure</div>
+          <div class="gm"><span class="mdot"></span>MuleSoft</div>
+        </div>
+      </div>
+
+      <div class="sdiv"></div>
+      <div class="slabel orange">Apps</div>
+      <div class="ngrp ngrp-apps" id="grp-apps">
+        <div class="dot d-orange"></div>
+        <div class="gh"><div class="ico ico-apps">📦</div><div class="gt">APPS</div></div>
+        <hr class="gdiv"/>
+        <div class="gmlist">
+          <div class="gm"><span class="mdot"></span>HP Applications</div>
+          <div class="gm"><span class="mdot"></span>VeeamONE</div>
+          <div class="gm"><span class="mdot"></span>Other Apps</div>
+        </div>
+      </div>
+
+    </div><!-- /col0 -->
+
+    <!-- ══ COL 1 — SOLARWINDS + HF-01..05 + SAP + HYBRIS ══ -->
+    <div class="col col-hf" id="col1" style="grid-column:2; padding-left:40px;">
+
+      <!-- Solarwinds ABOVE HF-01 -->
+      <div class="slabel cyan">Network Relay</div>
+      <div class="n-relay" id="sw-node">
+        <div class="dot d-cyan"></div>
+        <div class="ico ico-relay">📡</div>
+        <div>
+          <div class="relay-t">SOLARWINDS</div>
+          <div class="relay-s">Network Monitor</div>
+          <div class="relay-s" style="color:#0a3a4a;">Relay → Splunk</div>
+        </div>
+      </div>
+
+      <div class="sdiv"></div>
+      <div class="slabel center">Heavy Forwarders</div>
+
+      <div class="node n-hf" id="hf1">
+        <div class="dot d-blue"></div>
+        <div class="ico ico-hf">🖥️</div>
+        <div><div class="nl">HF-01</div><div class="ns">10.183.4.57</div></div>
+      </div>
+      <div class="node n-hf" id="hf2">
+        <div class="dot d-blue"></div>
+        <div class="ico ico-hf">🖥️</div>
+        <div><div class="nl">HF-02</div><div class="ns">10.183.4.58</div></div>
+      </div>
+      <div class="node n-hf" id="hf3">
+        <div class="dot d-blue"></div>
+        <div class="ico ico-hf">🖥️</div>
+        <div><div class="nl">HF-03</div><div class="ns">10.184.4.23</div></div>
+      </div>
+      <div class="node n-hf" id="hf4">
+        <div class="dot d-blue"></div>
+        <div class="ico ico-hf">🖥️</div>
+        <div><div class="nl">HF-04</div><div class="ns">10.184.4.22</div></div>
+      </div>
+      <div class="node n-hf5" id="hf5">
+        <div class="dot" style="background:#30e8c0;box-shadow:0 0 6px #30e8c0;"></div>
+        <div class="ico" style="background:rgba(0,180,150,.22);">🖥️</div>
+        <div><div class="nl">HF-05 + DS</div><div class="ns">10.183.36.74</div></div>
+      </div>
+
+      <!-- SAP BELOW HF-05 -->
+      <div class="sdiv"></div>
+      <div class="slabel gold">ERP</div>
+      <div class="node n-sap" id="sap-node">
+        <div class="dot d-gold"></div>
+        <div class="ico ico-sap">⚙️</div>
+        <div>
+          <div class="nl">SAP / ERP</div>
+          <div class="ns">NetWeaver · PowerConnect</div>
+        </div>
+      </div>
+
+      <!-- HYBRIS BELOW SAP -->
+      <div class="sdiv"></div>
+      <div class="slabel red">GKE</div>
+      <div class="node n-gke" id="hybris-node">
+        <div class="dot d-red"></div>
+        <div class="ico ico-gke">⚡</div>
+        <div>
+          <div class="nl">HYBRIS</div>
+          <div class="ns">Google Kubernetes Engine</div>
+        </div>
+      </div>
+
+    </div><!-- /col1 -->
+
+    <!-- ══ COL 2+3+4 — SPLUNK CLOUD + DATADOG (true centre) ══ -->
+    <div class="col col-mid" id="col2" style="grid-column:3/6; justify-self:center; align-self:center;">
+
+      <div class="n-splunk" id="splunk-node">
+        <div class="ico ico-sp">☁️</div>
+        <div class="sp-t">SPLUNK CLOUD</div>
+        <div class="sp-s">Splunk Cloud Platform</div>
+        <div class="sp-s" style="color:#0a4080;margin-top:3px;">Search · Index · Analyze · Alert</div>
+        <div class="dot d-green" style="top:13px;right:13px;"></div>
+      </div>
+
+      <!-- DATADOG BELOW SPLUNK -->
+      <div class="sdiv" style="margin:18px 0 8px;"></div>
+      <div class="slabel pink center">APM</div>
+      <div class="n-datadog" id="dd-node">
+        <div class="dot d-pink"></div>
+        <div class="ico ico-dd">🐕</div>
+        <div class="dd-t">DATADOG</div>
+        <div class="dd-s">APM · Metrics · Traces</div>
+        <div class="dd-s" style="color:#3a1a60;margin-top:2px;">Hybris / MuleSoft APM</div>
+      </div>
+
+    </div><!-- /col2 -->
+
+    <!-- ══ COL 5 — iAUTOMATE + SERVICENOW ══ -->
+    <div class="col col-right" id="col3" style="grid-column:6;">
+
+      <div class="slabel green center">Self Heal</div>
+      <div class="n-auto" id="auto-node">
+        <div class="dot d-orange"></div>
+        <div class="ico ico-auto">🤖</div>
+        <div class="auto-t">SELF HEAL</div>
+        <div class="auto-s">iAutomate</div>
+        <div class="auto-s" style="font-size:.51rem;color:#7a3010;">HCL · MS System Center</div>
+        <div class="auto-ss">Alert → Remediate → Ticket</div>
+      </div>
+
+      <div class="sdiv"></div>
+      <div class="slabel green center">ITSM</div>
+      <div class="n-snow" id="snow-node">
+        <div class="dot d-violet"></div>
+        <div class="ico ico-snow">🎫</div>
+        <div class="snow-t">SERVICE NOW</div>
+        <div class="snow-s">ITSM / Incident Management</div>
+        <div class="snow-s" style="color:#3a2080;margin-top:2px;">Ticket → Team</div>
+      </div>
+
+    </div><!-- /col3 -->
+
+  </div><!-- /layout -->
+</div><!-- /diagram -->
+
+<!-- ─── LEGEND ─── -->
+<div class="legend">
+  <div class="li"><div class="lline" style="color:#e07030;"></div><span style="font-size:9px;color:#e07030;">▶</span>&nbsp;Sources → HF</div>
+  <div class="li"><span style="font-size:9px;color:#6030cc;">◀</span><div class="lline" style="color:#6030cc;"></div>&nbsp;Net → Solarwinds</div>
+  <div class="li"><div class="lline" style="color:#4488cc;"></div><span style="font-size:9px;color:#4488cc;">▶</span>&nbsp;HF ↔ HF (mesh)</div>
+  <div class="li"><div class="lline" style="color:#1e6aaa;"></div><span style="font-size:9px;color:#2a7acc;">▶</span>&nbsp;HF-01–04 ↔ Splunk</div>
+  <div class="li"><div class="lline" style="color:#14c0a0;"></div><span style="font-size:9px;color:#14c0a0;">▶</span>&nbsp;HF-05 ↔ Splunk</div>
+  <div class="li"><div class="lline" style="color:#00bbdd;"></div><span style="font-size:9px;color:#00bbdd;">▶</span>&nbsp;Solarwinds → Splunk</div>
+  <div class="li"><div class="lline" style="color:#c89020;"></div><span style="font-size:9px;color:#c89020;">▶</span>&nbsp;SAP → Splunk</div>
+  <div class="li"><div class="lline" style="color:#aa2030;"></div><span style="font-size:9px;color:#aa2030;">▶</span>&nbsp;GKE → Splunk</div>
+  <div class="li"><div class="lline" style="color:#aa30aa;"></div><span style="font-size:9px;color:#aa30aa;">▶</span>&nbsp;Datadog ↔ Splunk</div>
+  <div class="li"><div class="lline" style="color:#ff7030;"></div><span style="font-size:9px;color:#ff7030;">▶</span>&nbsp;Splunk → iAutomate</div>
+  <div class="li"><div class="lline" style="color:#7040ee;"></div><span style="font-size:9px;color:#7040ee;">▶</span>&nbsp;Splunk ↔ ServiceNow</div>
+  <div class="li"><div class="lline" style="color:#aa8830;"></div><span style="font-size:9px;color:#aa8830;">▶</span>&nbsp;iAutomate → ServiceNow</div>
+  <div class="li"><span class="ldot" style="background:#9070ee;box-shadow:0 0 5px #9070ee;"></span>Network</div>
+  <div class="li"><span class="ldot" style="background:#00ffcc;box-shadow:0 0 5px #00ffcc;"></span>Infra/VMs</div>
+  <div class="li"><span class="ldot" style="background:#cc88ff;box-shadow:0 0 5px #cc88ff;"></span>Cloud</div>
+  <div class="li"><span class="ldot" style="background:#ffaa60;box-shadow:0 0 5px #ffaa60;"></span>Apps</div>
+  <div class="li"><span class="ldot" style="background:#00aaff;box-shadow:0 0 5px #00aaff;"></span>HF-01–04</div>
+  <div class="li"><span class="ldot" style="background:#30e8c0;box-shadow:0 0 5px #30e8c0;"></span>HF-05 + DS</div>
+  <div class="li"><span class="ldot" style="background:#00eeff;box-shadow:0 0 5px #00eeff;"></span>Solarwinds</div>
+  <div class="li"><span class="ldot" style="background:#ff60cc;box-shadow:0 0 5px #ff60cc;"></span>Datadog</div>
+  <div class="li"><span class="ldot" style="background:#ff8040;box-shadow:0 0 5px #ff8040;"></span>Self Heal / iAutomate</div>
+  <div class="li"><span class="ldot" style="background:#9070ff;box-shadow:0 0 5px #9070ff;"></span>ServiceNow</div>
+</div>
+
+<script>
+  function G(id) {
+    const d = document.querySelector('.diagram').getBoundingClientRect();
+    const e = document.getElementById(id).getBoundingClientRect();
+    return {
+      y: e.top  - d.top  + e.height/2,
+      x: e.left - d.left + e.width/2,
+      t: e.top  - d.top,
+      b: e.top  - d.top  + e.height,
+      l: e.left - d.left,
+      r: e.left - d.left + e.width,
+    };
+  }
+
+  function P(svg, d, stroke, width, dash, delay, rev, marker) {
+    const p = document.createElementNS('http://www.w3.org/2000/svg','path');
+    p.setAttribute('d', d);
+    p.setAttribute('stroke', stroke);
+    p.setAttribute('stroke-width', width || '1.5');
+    p.setAttribute('fill','none');
+    if (dash) { p.setAttribute('stroke-dasharray', dash); p.style.animation = `dashFlow 1.6s linear ${delay||0}s infinite${rev?' reverse':''}`; }
+    if (marker) p.setAttribute('marker-end', marker);
+    svg.appendChild(p);
+  }
+
+  function draw() {
+    const svg = document.getElementById('svg-lines');
+    svg.innerHTML = `<defs>
+      <marker id="m-src"  markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto"><polygon points="0 0,7 2.5,0 5" fill="#e07030"/></marker>
+      <marker id="m-hfr"  markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto"><polygon points="0 0,7 2.5,0 5" fill="#2a7acc"/></marker>
+      <marker id="m-hfl"  markerWidth="7" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse"><polygon points="0 0,7 2.5,0 5" fill="#2a7acc"/></marker>
+      <marker id="m-hf5r" markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto"><polygon points="0 0,7 2.5,0 5" fill="#14c0a0"/></marker>
+      <marker id="m-hf5l" markerWidth="7" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse"><polygon points="0 0,7 2.5,0 5" fill="#14c0a0"/></marker>
+      <marker id="m-hfcr" markerWidth="6" markerHeight="5" refX="5" refY="2.5" orient="auto"><polygon points="0 0,6 2.5,0 5" fill="#4488cc"/></marker>
+      <marker id="m-hfcl" markerWidth="6" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse"><polygon points="0 0,6 2.5,0 5" fill="#4488cc"/></marker>
+      <marker id="m-net"  markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto"><polygon points="0 0,7 2.5,0 5" fill="#6030cc"/></marker>
+      <marker id="m-sw"   markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto"><polygon points="0 0,7 2.5,0 5" fill="#00bbdd"/></marker>
+      <marker id="m-sap"  markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto"><polygon points="0 0,7 2.5,0 5" fill="#c89020"/></marker>
+      <marker id="m-gke"  markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto"><polygon points="0 0,7 2.5,0 5" fill="#aa2030"/></marker>
+      <marker id="m-ddr"  markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto"><polygon points="0 0,7 2.5,0 5" fill="#aa30aa"/></marker>
+      <marker id="m-ddl"  markerWidth="7" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse"><polygon points="0 0,7 2.5,0 5" fill="#aa30aa"/></marker>
+      <marker id="m-aut"  markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto"><polygon points="0 0,7 2.5,0 5" fill="#ff7030"/></marker>
+      <marker id="m-snr"  markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto"><polygon points="0 0,7 2.5,0 5" fill="#7040ee"/></marker>
+      <marker id="m-snl"  markerWidth="7" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse"><polygon points="0 0,7 2.5,0 5" fill="#7040ee"/></marker>
+      <marker id="m-ia"   markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto"><polygon points="0 0,7 2.5,0 5" fill="#aa8830"/></marker>
+    </defs>`;
+
+    const DA  = '5 3';
+    const sp  = G('splunk-node');
+    const sw  = G('sw-node');
+    const hf1 = G('hf1'); const hf2 = G('hf2'); const hf3 = G('hf3');
+    const hf4 = G('hf4'); const hf5 = G('hf5');
+    const sap = G('sap-node');
+    const gke = G('hybris-node');
+    const dd  = G('dd-node');
+    const au  = G('auto-node');
+    const sn  = G('snow-node');
+    const gn  = G('grp-net');
+    const gi  = G('grp-infra');
+    const gc  = G('grp-cloud');
+    const ga  = G('grp-apps');
+
+    // ── Network → Solarwinds (violet, top path)
+    const cxNS = (gn.r + sw.l) / 2;
+    P(svg, `M ${gn.r+4} ${gn.y} C ${cxNS} ${gn.y}, ${cxNS} ${sw.y} ${sw.l-4} ${sw.y}`,
+      '#6030cc','1.5',DA,0.1,false,'url(#m-net)');
+
+    // ── Source groups → HFs (orange, fanned so each arrow is distinct)
+    // Network → HF1 (top fan)
+    const cx_n1 = (gn.r + hf1.l)/2;
+    P(svg, `M ${gn.r+4} ${gn.b-8} C ${cx_n1} ${gn.b-8}, ${cx_n1} ${hf1.y} ${hf1.l-4} ${hf1.y}`,
+      '#e07030','1.5',DA,0,false,'url(#m-src)');
+
+    // Infra → HF2
+    const cx_i2 = (gi.r + hf2.l)/2;
+    P(svg, `M ${gi.r+4} ${gi.y-8} C ${cx_i2} ${gi.y-8}, ${cx_i2} ${hf2.y} ${hf2.l-4} ${hf2.y}`,
+      '#e07030','1.5',DA,0.18,false,'url(#m-src)');
+
+    // Infra → HF3
+    P(svg, `M ${gi.r+4} ${gi.y+8} C ${cx_i2} ${gi.y+8}, ${cx_i2} ${hf3.y} ${hf3.l-4} ${hf3.y}`,
+      '#e07030','1.5',DA,0.32,false,'url(#m-src)');
+
+    // Cloud → HF3
+    const cx_c3 = (gc.r + hf3.l)/2;
+    P(svg, `M ${gc.r+4} ${gc.y-8} C ${cx_c3} ${gc.y-8}, ${cx_c3} ${hf3.y+9} ${hf3.l-4} ${hf3.y+9}`,
+      '#e07030','1.5',DA,0.14,false,'url(#m-src)');
+
+    // Cloud → HF4
+    P(svg, `M ${gc.r+4} ${gc.y+8} C ${cx_c3} ${gc.y+8}, ${cx_c3} ${hf4.y} ${hf4.l-4} ${hf4.y}`,
+      '#e07030','1.5',DA,0.28,false,'url(#m-src)');
+
+    // Apps → HF4
+    const cx_a4 = (ga.r + hf4.l)/2;
+    P(svg, `M ${ga.r+4} ${ga.y-8} C ${cx_a4} ${ga.y-8}, ${cx_a4} ${hf4.y+9} ${hf4.l-4} ${hf4.y+9}`,
+      '#e07030','1.5',DA,0.08,false,'url(#m-src)');
+
+    // Apps → HF5
+    P(svg, `M ${ga.r+4} ${ga.y+8} C ${cx_a4} ${ga.y+8}, ${cx_a4} ${hf5.y} ${hf5.l-4} ${hf5.y}`,
+      '#e07030','1.5',DA,0.22,false,'url(#m-src)');
+
+    // ── Solarwinds → Splunk (cyan, from right side of SW straight to top of Splunk)
+    const cxSW = (sw.r + sp.l)/2;
+    P(svg, `M ${sw.r+4} ${sw.y} C ${cxSW} ${sw.y}, ${cxSW} ${sp.t+24} ${sp.l-4} ${sp.t+24}`,
+      '#00bbdd','1.5',DA,0.5,false,'url(#m-sw)');
+
+    // ── HF-01..04 → Splunk (bidirectional blue), staggered offsets
+    const hfs    = [hf1, hf2, hf3, hf4];
+    const spOffs = [-44, -22, 0, 22];
+    hfs.forEach((hf, i) => {
+      const cx = (hf.r + sp.l) / 2;
+      const sy = sp.y + spOffs[i];
+      P(svg, `M ${hf.r+4} ${hf.y-3} C ${cx} ${hf.y-3}, ${cx} ${sy-3} ${sp.l-4} ${sy-3}`,
+        '#1e6aaa','1.5',DA, i*0.2, false,'url(#m-hfr)');
+      P(svg, `M ${sp.l-4} ${sy+3} C ${cx} ${sy+3}, ${cx} ${hf.y+3} ${hf.r+4} ${hf.y+3}`,
+        '#1e6aaa','1.5',DA, i*0.2+0.85, true,'url(#m-hfl)');
+    });
+
+    // ── HF-05 → Splunk (bidirectional teal — distinct colour)
+    const cx5  = (hf5.r + sp.l) / 2;
+    const sy5  = sp.y + 44;
+    P(svg, `M ${hf5.r+4} ${hf5.y-3} C ${cx5} ${hf5.y-3}, ${cx5} ${sy5-3} ${sp.l-4} ${sy5-3}`,
+      '#14c0a0','1.5',DA, 0.8, false,'url(#m-hf5r)');
+    P(svg, `M ${sp.l-4} ${sy5+3} C ${cx5} ${sy5+3}, ${cx5} ${hf5.y+3} ${hf5.r+4} ${hf5.y+3}`,
+      '#14c0a0','1.5',DA, 1.65, true,'url(#m-hf5l)');
+
+    // ── HF chain: bidirectional arrows between consecutive pairs only
+    // HF1↔HF2, HF2↔HF3, HF3↔HF4, HF4↔HF5
+    // Draw on the LEFT side of the nodes using a small offset to keep arrows visible
+    const hfPairs = [[hf1,hf2],[hf2,hf3],[hf3,hf4],[hf4,hf5]];
+    hfPairs.forEach(([a, b], i) => {
+      const isHf5pair = (i === 3); // HF4↔HF5 uses teal
+      const col = isHf5pair ? '#14c0a0' : '#4488cc';
+      const mR  = isHf5pair ? 'url(#m-hf5r)' : 'url(#m-hfcr)';
+      const mL  = isHf5pair ? 'url(#m-hf5l)' : 'url(#m-hfcl)';
+      const xL  = a.l - 14; // vertical connecting line x, just left of column
+      // down arrow (a → b): left offset -3
+      P(svg, `M ${xL-3} ${a.b+2} L ${xL-3} ${b.t-2}`, col, '1.3', DA, i*0.18, false, mR);
+      // up arrow (b → a): right offset +3
+      P(svg, `M ${xL+3} ${b.t-2} L ${xL+3} ${a.b+2}`, col, '1.3', DA, i*0.18+0.7, true, mL);
+    });
+
+    // ── SAP → Splunk (gold, curves down-right from below HF5)
+    const cxSAP = (sap.r + sp.l)/2;
+    P(svg, `M ${sap.r+4} ${sap.y} C ${cxSAP} ${sap.y}, ${cxSAP} ${sp.b-30} ${sp.l-4} ${sp.b-30}`,
+      '#c89020','1.5',DA,0.3,false,'url(#m-sap)');
+
+    // ── GKE/Hybris → Splunk (crimson, below SAP)
+    const cxGKE = (gke.r + sp.l)/2;
+    P(svg, `M ${gke.r+4} ${gke.y} C ${cxGKE} ${gke.y}, ${cxGKE} ${sp.b-12} ${sp.l-4} ${sp.b-12}`,
+      '#aa2030','1.5',DA,0.2,false,'url(#m-gke)');
+
+    // ── Datadog ↔ Splunk (purple bidirectional, vertical — DD is directly below Splunk)
+    // Splunk → Datadog (down)
+    P(svg, `M ${sp.x-8} ${sp.b+4} L ${dd.x-8} ${dd.t-4}`,
+      '#aa30aa','1.5',DA,0.35,false,'url(#m-ddr)');
+    // Datadog → Splunk (up, offset slightly)
+    P(svg, `M ${dd.x+8} ${dd.t-4} L ${sp.x+8} ${sp.b+4}`,
+      '#aa30aa','1.5',DA,0.35,true,'url(#m-ddl)');
+
+    // ── Splunk → iAutomate (orange)
+    const cxAU = (sp.r + au.l)/2;
+    P(svg, `M ${sp.r+4} ${sp.y-24} C ${cxAU} ${sp.y-24}, ${cxAU} ${au.y} ${au.l-4} ${au.y}`,
+      '#ff7030','1.5',DA,0.25,false,'url(#m-aut)');
+
+    // ── Splunk ↔ ServiceNow (indigo bidirectional)
+    const cxSN = (sp.r + sn.l)/2;
+    P(svg, `M ${sp.r+4} ${sp.y+24} C ${cxSN} ${sp.y+24}, ${cxSN} ${sn.y-6} ${sn.l-4} ${sn.y-6}`,
+      '#7040ee','1.5',DA,0.1,false,'url(#m-snr)');
+    P(svg, `M ${sn.l-4} ${sn.y+6} C ${cxSN} ${sn.y+6}, ${cxSN} ${sp.y+40} ${sp.r+4} ${sp.y+40}`,
+      '#7040ee','1.5',DA,0.95,true,'url(#m-snl)');
+
+    // ── iAutomate → ServiceNow (amber, straight down)
+    P(svg, `M ${au.x} ${au.b+5} L ${sn.x} ${sn.t-5}`,
+      '#aa8830','1.5',DA,0.4,false,'url(#m-ia)');
+  }
+
+  window.addEventListener('load', () => { setTimeout(draw, 160); });
+  window.addEventListener('resize', draw);
+</script>
+</body>
+</html>
