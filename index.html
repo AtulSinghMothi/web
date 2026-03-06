@@ -418,6 +418,7 @@
           <div class="gm"><span class="mdot"></span>Idera</div>
           <div class="gm"><span class="mdot"></span>Dell EMC</div>
           <div class="gm"><span class="mdot"></span>HP / VMs</div>
+          <div class="gm"><span class="mdot"></span>Win &amp; Linux</div>
         </div>
       </div>
 
@@ -578,12 +579,12 @@
 
 <!-- ─── LEGEND ─── -->
 <div class="legend">
-  <div class="li"><div class="lline" style="color:#e07030;"></div><span style="font-size:9px;color:#e07030;">▶</span>&nbsp;Sources → HF</div>
+  <div class="li"><div class="lline" style="color:#e07030;"></div><span style="font-size:9px;color:#e07030;">▶</span>&nbsp;Infra/Cloud/Apps → HF</div>
   <div class="li"><span style="font-size:9px;color:#6030cc;">◀</span><div class="lline" style="color:#6030cc;"></div>&nbsp;Net → Solarwinds</div>
+  <div class="li"><div class="lline" style="color:#00bbdd;"></div><span style="font-size:9px;color:#00bbdd;">▶</span>&nbsp;Infra → Solarwinds</div>
   <div class="li"><div class="lline" style="color:#4488cc;"></div><span style="font-size:9px;color:#4488cc;">▶</span>&nbsp;HF ↔ HF (mesh)</div>
   <div class="li"><div class="lline" style="color:#1e6aaa;"></div><span style="font-size:9px;color:#2a7acc;">▶</span>&nbsp;HF-01–04 ↔ Splunk</div>
   <div class="li"><div class="lline" style="color:#14c0a0;"></div><span style="font-size:9px;color:#14c0a0;">▶</span>&nbsp;HF-05 ↔ Splunk</div>
-  <div class="li"><div class="lline" style="color:#00bbdd;"></div><span style="font-size:9px;color:#00bbdd;">▶</span>&nbsp;Solarwinds → Splunk</div>
   <div class="li"><div class="lline" style="color:#c89020;"></div><span style="font-size:9px;color:#c89020;">▶</span>&nbsp;SAP → Splunk</div>
   <div class="li"><div class="lline" style="color:#aa2030;"></div><span style="font-size:9px;color:#aa2030;">▶</span>&nbsp;GKE → Splunk</div>
   <div class="li"><div class="lline" style="color:#aa30aa;"></div><span style="font-size:9px;color:#aa30aa;">▶</span>&nbsp;Datadog ↔ Splunk</div>
@@ -664,16 +665,17 @@
     const gc  = G('grp-cloud');
     const ga  = G('grp-apps');
 
-    // ── Network → Solarwinds (violet, top path)
+    // ── Network → Solarwinds ONLY (violet)
     const cxNS = (gn.r + sw.l) / 2;
     P(svg, `M ${gn.r+4} ${gn.y} C ${cxNS} ${gn.y}, ${cxNS} ${sw.y} ${sw.l-4} ${sw.y}`,
       '#6030cc','1.5',DA,0.1,false,'url(#m-net)');
 
-    // ── Source groups → HFs (orange, fanned so each arrow is distinct)
-    const cx_n1 = (gn.r + hf1.l)/2;
-    P(svg, `M ${gn.r+4} ${gn.b-8} C ${cx_n1} ${gn.b-8}, ${cx_n1} ${hf1.y} ${hf1.l-4} ${hf1.y}`,
-      '#e07030','1.5',DA,0,false,'url(#m-src)');
+    // ── Infra → Solarwinds (teal/cyan path, from top of infra box)
+    const cxIS = (gi.r + sw.l) / 2;
+    P(svg, `M ${gi.r+4} ${gi.t+14} C ${cxIS} ${gi.t+14}, ${cxIS} ${sw.b-10} ${sw.l-4} ${sw.b-10}`,
+      '#00bbdd','1.3',DA,0.55,false,'url(#m-sw)');
 
+    // ── Source groups → HFs (orange) — Infra, Cloud, Apps only (Network removed)
     const cx_i2 = (gi.r + hf2.l)/2;
     P(svg, `M ${gi.r+4} ${gi.y-8} C ${cx_i2} ${gi.y-8}, ${cx_i2} ${hf2.y} ${hf2.l-4} ${hf2.y}`,
       '#e07030','1.5',DA,0.18,false,'url(#m-src)');
