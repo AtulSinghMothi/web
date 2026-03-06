@@ -53,24 +53,9 @@
     pointer-events:none; overflow:visible;
   }
 
-  /*
-   * LAYOUT:
-   *  col0 (190px) = source groups (Network, Infra, Cloud, Apps)
-   *  gap  (56px)
-   *  col1 (175px) = Solarwinds + HF-01..05 + SAP + Hybris  (one tall column)
-   *  gap  (56px)
-   *  col2 (230px) = Splunk Cloud (centre, spans vertically centred)
-   *  gap  (56px)
-   *  col3 (180px) = iAutomate + ServiceNow
-   *
-   *  Datadog sits BELOW Splunk Cloud, centred on same x-axis.
-   *  We achieve this with an absolute-positioned element inside the diagram.
-   */
-
   .layout {
     display: grid;
     grid-template-columns: 190px 175px 1fr 230px 1fr 180px;
-    /* col0=sources  col1=HFs  col2=left-gap  col3=splunk+dd  col4=right-gap  col5=downstream */
     column-gap: 0;
     align-items: start;
     padding: 28px 0 28px;
@@ -78,7 +63,7 @@
   }
 
   .gap { flex-shrink:0; }
-  .flex-grow { flex: 1; }   /* kept for legacy, not used in grid */
+  .flex-grow { flex: 1; }
 
   /* vertical flex columns */
   .col {
@@ -214,20 +199,75 @@
   }
   .n-relay:hover { transform:translateY(-2px); box-shadow:0 0 26px rgba(0,220,255,.32); border-color:#2ab8d8; }
 
-  /* SAP inline */
-  /* uses .node .n-sap already */
-
-  /* Splunk Cloud */
-  .n-splunk {
+  /* Splunk Cloud — now a clickable anchor */
+  a.n-splunk {
+    text-decoration: none;
     background:linear-gradient(145deg,#071830,#05102a 60%,#071830);
     border:1.5px solid #0a5aaa; border-radius:20px;
     box-shadow:0 0 60px rgba(0,120,255,.26),0 0 120px rgba(0,80,200,.12),inset 0 1px 0 rgba(100,180,255,.1);
     padding:30px 22px;
     display:flex; flex-direction:column; align-items:center; gap:12px;
-    width:100%; position:relative; cursor:default;
-    transition:box-shadow .3s;
+    width:100%; position:relative; cursor:pointer;
+    transition:box-shadow .3s, transform .2s, border-color .2s;
   }
-  .n-splunk:hover { box-shadow:0 0 80px rgba(0,160,255,.4),0 0 150px rgba(0,100,220,.18),inset 0 1px 0 rgba(100,180,255,.14); }
+  a.n-splunk:hover {
+    box-shadow:0 0 80px rgba(0,160,255,.5),0 0 150px rgba(0,100,220,.24),inset 0 1px 0 rgba(100,180,255,.2);
+    border-color:#2a8aee;
+    transform:translateY(-3px);
+  }
+
+  /* Link hint badge */
+  .splunk-link-hint {
+    font-family:'Share Tech Mono',monospace;
+    font-size:.48rem;
+    letter-spacing:.08em;
+    color:#1a5080;
+    display:flex;
+    align-items:center;
+    gap:4px;
+    margin-top:2px;
+    transition: color .2s;
+  }
+  a.n-splunk:hover .splunk-link-hint {
+    color:#40aaff;
+  }
+  .splunk-link-hint::before {
+    content:'🔗';
+    font-size:.7rem;
+  }
+
+  /* ─── GENERIC LINK HINT (all clickable nodes) ─── */
+  .link-hint {
+    font-family:'Share Tech Mono',monospace;
+    font-size:.46rem; letter-spacing:.07em;
+    display:flex; align-items:center; gap:3px;
+    margin-top:2px; transition:color .2s;
+  }
+  .link-hint::before { content:'🔗'; font-size:.62rem; }
+
+  /* anchor wrappers — keep each node's original look */
+  a.n-relay, a.node, a.n-datadog, a.n-snow {
+    text-decoration:none; display:flex; cursor:pointer;
+    transition:transform .2s, box-shadow .2s, border-color .2s;
+  }
+  a.n-relay  { align-items:center; gap:10px; }
+  a.node     { align-items:center; gap:10px; }
+  a.n-datadog{ flex-direction:column; align-items:center; gap:7px; text-align:center; }
+  a.n-snow   { flex-direction:column; align-items:center; gap:7px; text-align:center; }
+
+  /* hover glows for each anchor type */
+  a.n-relay:hover  { transform:translateY(-2px); box-shadow:0 0 26px rgba(0,220,255,.38); border-color:#2ab8d8; }
+  a.node.n-hf:hover  { transform:translateY(-2px); border-color:#2a7acc; box-shadow:0 0 22px rgba(0,140,255,.36); }
+  a.node.n-hf5:hover { transform:translateY(-2px); border-color:#14c0a0; box-shadow:0 0 22px rgba(0,220,180,.4); }
+  a.n-datadog:hover  { transform:translateY(-2px); box-shadow:0 0 26px rgba(150,60,240,.38); border-color:#9a3acc; }
+  a.n-snow:hover     { transform:translateY(-2px); box-shadow:0 0 28px rgba(130,70,255,.44); border-color:#7040ee; }
+
+  /* link hint colours per node type */
+  a.n-relay   .link-hint { color:#0a4a5a; } a.n-relay:hover   .link-hint { color:#40d0f0; }
+  a.node.n-hf  .link-hint { color:#1a3a5a; } a.node.n-hf:hover  .link-hint { color:#6ab8f0; }
+  a.node.n-hf5 .link-hint { color:#0a4a3a; } a.node.n-hf5:hover .link-hint { color:#30e8c0; }
+  a.n-datadog  .link-hint { color:#3a1a60; } a.n-datadog:hover  .link-hint { color:#b060ff; }
+  a.n-snow     .link-hint { color:#2a1060; } a.n-snow:hover     .link-hint { color:#9070ff; }
 
   /* Datadog — sits below Splunk, same column */
   .n-datadog {
@@ -414,44 +454,45 @@
 
       <!-- Solarwinds ABOVE HF-01 -->
       <div class="slabel cyan">Network Relay</div>
-      <div class="n-relay" id="sw-node">
+      <a class="n-relay" id="sw-node" href="https://netmon.gmcr.com/Orion/SummaryView.aspx?ViewID=1" target="_blank" rel="noopener noreferrer">
         <div class="dot d-cyan"></div>
         <div class="ico ico-relay">📡</div>
         <div>
           <div class="relay-t">SOLARWINDS</div>
           <div class="relay-s">Network Monitor</div>
           <div class="relay-s" style="color:#0a3a4a;">Relay → Splunk</div>
+          <div class="link-hint">netmon.gmcr.com</div>
         </div>
-      </div>
+      </a>
 
       <div class="sdiv"></div>
       <div class="slabel center">Heavy Forwarders</div>
 
-      <div class="node n-hf" id="hf1">
+      <a class="node n-hf" id="hf1" href="https://10.183.4.57:8000/" target="_blank" rel="noopener noreferrer">
         <div class="dot d-blue"></div>
         <div class="ico ico-hf">🖥️</div>
-        <div><div class="nl">HF-01</div><div class="ns">10.183.4.57</div></div>
-      </div>
-      <div class="node n-hf" id="hf2">
+        <div><div class="nl">HF-01</div><div class="ns">10.183.4.57</div><div class="link-hint">:8000</div></div>
+      </a>
+      <a class="node n-hf" id="hf2" href="https://10.183.4.58:8000/" target="_blank" rel="noopener noreferrer">
         <div class="dot d-blue"></div>
         <div class="ico ico-hf">🖥️</div>
-        <div><div class="nl">HF-02</div><div class="ns">10.183.4.58</div></div>
-      </div>
-      <div class="node n-hf" id="hf3">
+        <div><div class="nl">HF-02</div><div class="ns">10.183.4.58</div><div class="link-hint">:8000</div></div>
+      </a>
+      <a class="node n-hf" id="hf3" href="https://10.184.4.22:8000/" target="_blank" rel="noopener noreferrer">
         <div class="dot d-blue"></div>
         <div class="ico ico-hf">🖥️</div>
-        <div><div class="nl">HF-03</div><div class="ns">10.184.4.23</div></div>
-      </div>
-      <div class="node n-hf" id="hf4">
+        <div><div class="nl">HF-03</div><div class="ns">10.184.4.23</div><div class="link-hint">:8000</div></div>
+      </a>
+      <a class="node n-hf" id="hf4" href="https://10.184.4.23:8000/" target="_blank" rel="noopener noreferrer">
         <div class="dot d-blue"></div>
         <div class="ico ico-hf">🖥️</div>
-        <div><div class="nl">HF-04</div><div class="ns">10.184.4.22</div></div>
-      </div>
-      <div class="node n-hf5" id="hf5">
+        <div><div class="nl">HF-04</div><div class="ns">10.184.4.22</div><div class="link-hint">:8000</div></div>
+      </a>
+      <a class="node n-hf5" id="hf5" href="https://10.183.36.74:8000/" target="_blank" rel="noopener noreferrer">
         <div class="dot" style="background:#30e8c0;box-shadow:0 0 6px #30e8c0;"></div>
         <div class="ico" style="background:rgba(0,180,150,.22);">🖥️</div>
-        <div><div class="nl">HF-05 + DS</div><div class="ns">10.183.36.74</div></div>
-      </div>
+        <div><div class="nl">HF-05 + DS</div><div class="ns">10.183.36.74</div><div class="link-hint">:8000</div></div>
+      </a>
 
       <!-- SAP BELOW HF-05 -->
       <div class="sdiv"></div>
@@ -482,24 +523,27 @@
     <!-- ══ COL 2+3+4 — SPLUNK CLOUD + DATADOG (true centre) ══ -->
     <div class="col col-mid" id="col2" style="grid-column:3/6; justify-self:center; align-self:center;">
 
-      <div class="n-splunk" id="splunk-node">
+      <!-- Splunk Cloud — clickable hyperlink -->
+      <a class="n-splunk" id="splunk-node" href="https://kdrp.splunkcloud.com/" target="_blank" rel="noopener noreferrer">
         <div class="ico ico-sp">☁️</div>
         <div class="sp-t">SPLUNK CLOUD</div>
         <div class="sp-s">Splunk Cloud Platform</div>
         <div class="sp-s" style="color:#0a4080;margin-top:3px;">Search · Index · Analyze · Alert</div>
+        <div class="splunk-link-hint">kdrp.splunkcloud.com</div>
         <div class="dot d-green" style="top:13px;right:13px;"></div>
-      </div>
+      </a>
 
       <!-- DATADOG BELOW SPLUNK -->
       <div class="sdiv" style="margin:18px 0 8px;"></div>
       <div class="slabel pink center">APM</div>
-      <div class="n-datadog" id="dd-node">
+      <a class="n-datadog" id="dd-node" href="https://kdp.datadoghq.com/" target="_blank" rel="noopener noreferrer">
         <div class="dot d-pink"></div>
         <div class="ico ico-dd">🐕</div>
         <div class="dd-t">DATADOG</div>
         <div class="dd-s">APM · Metrics · Traces</div>
         <div class="dd-s" style="color:#3a1a60;margin-top:2px;">Hybris / MuleSoft APM</div>
-      </div>
+        <div class="link-hint">kdp.datadoghq.com</div>
+      </a>
 
     </div><!-- /col2 -->
 
@@ -518,13 +562,14 @@
 
       <div class="sdiv"></div>
       <div class="slabel green center">ITSM</div>
-      <div class="n-snow" id="snow-node">
+      <a class="n-snow" id="snow-node" href="https://kdrpprod.service-now.com/now/sow/home" target="_blank" rel="noopener noreferrer">
         <div class="dot d-violet"></div>
         <div class="ico ico-snow">🎫</div>
         <div class="snow-t">SERVICE NOW</div>
         <div class="snow-s">ITSM / Incident Management</div>
         <div class="snow-s" style="color:#3a2080;margin-top:2px;">Ticket → Team</div>
-      </div>
+        <div class="link-hint">kdrpprod.service-now.com</div>
+      </a>
 
     </div><!-- /col3 -->
 
@@ -625,44 +670,37 @@
       '#6030cc','1.5',DA,0.1,false,'url(#m-net)');
 
     // ── Source groups → HFs (orange, fanned so each arrow is distinct)
-    // Network → HF1 (top fan)
     const cx_n1 = (gn.r + hf1.l)/2;
     P(svg, `M ${gn.r+4} ${gn.b-8} C ${cx_n1} ${gn.b-8}, ${cx_n1} ${hf1.y} ${hf1.l-4} ${hf1.y}`,
       '#e07030','1.5',DA,0,false,'url(#m-src)');
 
-    // Infra → HF2
     const cx_i2 = (gi.r + hf2.l)/2;
     P(svg, `M ${gi.r+4} ${gi.y-8} C ${cx_i2} ${gi.y-8}, ${cx_i2} ${hf2.y} ${hf2.l-4} ${hf2.y}`,
       '#e07030','1.5',DA,0.18,false,'url(#m-src)');
 
-    // Infra → HF3
     P(svg, `M ${gi.r+4} ${gi.y+8} C ${cx_i2} ${gi.y+8}, ${cx_i2} ${hf3.y} ${hf3.l-4} ${hf3.y}`,
       '#e07030','1.5',DA,0.32,false,'url(#m-src)');
 
-    // Cloud → HF3
     const cx_c3 = (gc.r + hf3.l)/2;
     P(svg, `M ${gc.r+4} ${gc.y-8} C ${cx_c3} ${gc.y-8}, ${cx_c3} ${hf3.y+9} ${hf3.l-4} ${hf3.y+9}`,
       '#e07030','1.5',DA,0.14,false,'url(#m-src)');
 
-    // Cloud → HF4
     P(svg, `M ${gc.r+4} ${gc.y+8} C ${cx_c3} ${gc.y+8}, ${cx_c3} ${hf4.y} ${hf4.l-4} ${hf4.y}`,
       '#e07030','1.5',DA,0.28,false,'url(#m-src)');
 
-    // Apps → HF4
     const cx_a4 = (ga.r + hf4.l)/2;
     P(svg, `M ${ga.r+4} ${ga.y-8} C ${cx_a4} ${ga.y-8}, ${cx_a4} ${hf4.y+9} ${hf4.l-4} ${hf4.y+9}`,
       '#e07030','1.5',DA,0.08,false,'url(#m-src)');
 
-    // Apps → HF5
     P(svg, `M ${ga.r+4} ${ga.y+8} C ${cx_a4} ${ga.y+8}, ${cx_a4} ${hf5.y} ${hf5.l-4} ${hf5.y}`,
       '#e07030','1.5',DA,0.22,false,'url(#m-src)');
 
-    // ── Solarwinds → Splunk (cyan, from right side of SW straight to top of Splunk)
+    // ── Solarwinds → Splunk
     const cxSW = (sw.r + sp.l)/2;
     P(svg, `M ${sw.r+4} ${sw.y} C ${cxSW} ${sw.y}, ${cxSW} ${sp.t+24} ${sp.l-4} ${sp.t+24}`,
       '#00bbdd','1.5',DA,0.5,false,'url(#m-sw)');
 
-    // ── HF-01..04 → Splunk (bidirectional blue), staggered offsets
+    // ── HF-01..04 → Splunk (bidirectional blue)
     const hfs    = [hf1, hf2, hf3, hf4];
     const spOffs = [-44, -22, 0, 22];
     hfs.forEach((hf, i) => {
@@ -674,7 +712,7 @@
         '#1e6aaa','1.5',DA, i*0.2+0.85, true,'url(#m-hfl)');
     });
 
-    // ── HF-05 → Splunk (bidirectional teal — distinct colour)
+    // ── HF-05 → Splunk (bidirectional teal)
     const cx5  = (hf5.r + sp.l) / 2;
     const sy5  = sp.y + 44;
     P(svg, `M ${hf5.r+4} ${hf5.y-3} C ${cx5} ${hf5.y-3}, ${cx5} ${sy5-3} ${sp.l-4} ${sy5-3}`,
@@ -682,53 +720,47 @@
     P(svg, `M ${sp.l-4} ${sy5+3} C ${cx5} ${sy5+3}, ${cx5} ${hf5.y+3} ${hf5.r+4} ${hf5.y+3}`,
       '#14c0a0','1.5',DA, 1.65, true,'url(#m-hf5l)');
 
-    // ── HF chain: bidirectional arrows between consecutive pairs only
-    // HF1↔HF2, HF2↔HF3, HF3↔HF4, HF4↔HF5
-    // Draw on the LEFT side of the nodes using a small offset to keep arrows visible
+    // ── HF chain: bidirectional between consecutive pairs
     const hfPairs = [[hf1,hf2],[hf2,hf3],[hf3,hf4],[hf4,hf5]];
     hfPairs.forEach(([a, b], i) => {
-      const isHf5pair = (i === 3); // HF4↔HF5 uses teal
+      const isHf5pair = (i === 3);
       const col = isHf5pair ? '#14c0a0' : '#4488cc';
       const mR  = isHf5pair ? 'url(#m-hf5r)' : 'url(#m-hfcr)';
       const mL  = isHf5pair ? 'url(#m-hf5l)' : 'url(#m-hfcl)';
-      const xL  = a.l - 14; // vertical connecting line x, just left of column
-      // down arrow (a → b): left offset -3
+      const xL  = a.l - 14;
       P(svg, `M ${xL-3} ${a.b+2} L ${xL-3} ${b.t-2}`, col, '1.3', DA, i*0.18, false, mR);
-      // up arrow (b → a): right offset +3
       P(svg, `M ${xL+3} ${b.t-2} L ${xL+3} ${a.b+2}`, col, '1.3', DA, i*0.18+0.7, true, mL);
     });
 
-    // ── SAP → Splunk (gold, curves down-right from below HF5)
+    // ── SAP → Splunk
     const cxSAP = (sap.r + sp.l)/2;
     P(svg, `M ${sap.r+4} ${sap.y} C ${cxSAP} ${sap.y}, ${cxSAP} ${sp.b-30} ${sp.l-4} ${sp.b-30}`,
       '#c89020','1.5',DA,0.3,false,'url(#m-sap)');
 
-    // ── GKE/Hybris → Splunk (crimson, below SAP)
+    // ── GKE/Hybris → Splunk
     const cxGKE = (gke.r + sp.l)/2;
     P(svg, `M ${gke.r+4} ${gke.y} C ${cxGKE} ${gke.y}, ${cxGKE} ${sp.b-12} ${sp.l-4} ${sp.b-12}`,
       '#aa2030','1.5',DA,0.2,false,'url(#m-gke)');
 
-    // ── Datadog ↔ Splunk (purple bidirectional, vertical — DD is directly below Splunk)
-    // Splunk → Datadog (down)
+    // ── Datadog ↔ Splunk
     P(svg, `M ${sp.x-8} ${sp.b+4} L ${dd.x-8} ${dd.t-4}`,
       '#aa30aa','1.5',DA,0.35,false,'url(#m-ddr)');
-    // Datadog → Splunk (up, offset slightly)
     P(svg, `M ${dd.x+8} ${dd.t-4} L ${sp.x+8} ${sp.b+4}`,
       '#aa30aa','1.5',DA,0.35,true,'url(#m-ddl)');
 
-    // ── Splunk → iAutomate (orange)
+    // ── Splunk → iAutomate
     const cxAU = (sp.r + au.l)/2;
     P(svg, `M ${sp.r+4} ${sp.y-24} C ${cxAU} ${sp.y-24}, ${cxAU} ${au.y} ${au.l-4} ${au.y}`,
       '#ff7030','1.5',DA,0.25,false,'url(#m-aut)');
 
-    // ── Splunk ↔ ServiceNow (indigo bidirectional)
+    // ── Splunk ↔ ServiceNow
     const cxSN = (sp.r + sn.l)/2;
     P(svg, `M ${sp.r+4} ${sp.y+24} C ${cxSN} ${sp.y+24}, ${cxSN} ${sn.y-6} ${sn.l-4} ${sn.y-6}`,
       '#7040ee','1.5',DA,0.1,false,'url(#m-snr)');
     P(svg, `M ${sn.l-4} ${sn.y+6} C ${cxSN} ${sn.y+6}, ${cxSN} ${sp.y+40} ${sp.r+4} ${sp.y+40}`,
       '#7040ee','1.5',DA,0.95,true,'url(#m-snl)');
 
-    // ── iAutomate → ServiceNow (amber, straight down)
+    // ── iAutomate → ServiceNow
     P(svg, `M ${au.x} ${au.b+5} L ${sn.x} ${sn.t-5}`,
       '#aa8830','1.5',DA,0.4,false,'url(#m-ia)');
   }
